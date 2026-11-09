@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sopa de Letras - Metodologías Ágiles</title>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f6ff',
+                            100: '#e0edff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            accent: '#06b6d4',
+                            purple: '#8b5cf6',
+                            success: '#10b981',
+                            dark: '#0f172a',
+                            card: '#1e293b'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Selection Styling & Animations */
+        body {
+            background-color: #0b1120;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .grid-cell {
+            touch-action: none;
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .grid-cell.selected {
+            background-color: rgba(59, 130, 246, 0.4) !important;
+            color: #ffffff;
+            transform: scale(0.95);
+            box-shadow: inset 0 0 8px rgba(59, 130, 246, 0.6);
+        }
+
+        .grid-cell.found {
+            animation: pulseSuccess 0.4s ease-out forwards;
+            font-weight: 800;
+        }
+
+        .grid-cell.hint {
+            animation: pulseHint 1s infinite alternate;
+        }
+
+        @keyframes pulseSuccess {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); z-index: 10; }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes pulseHint {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); }
+            100% { transform: scale(1.08); box-shadow: 0 0 12px 4px rgba(234, 179, 8, 0.9); }
+        }
+
+        /* Glassmorphism effects */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.6);
+        }
+
+        /* Confetti Canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen font-sans antialiased bg-[#0b1120] flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Header Navigation -->
+    <header class="w-full glass-panel sticky top-0 z-30 px-4 py-3 border-b border-slate-800/80">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-accent flex items-center justify-center shadow-lg shadow-brand-500/20">
+                    <i class="fa-solid fa-layer-group text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-brand-accent bg-clip-text text-transparent">
+                        Agile Search
+                    </h1>
+                    <p class="text-xs text-slate-400">Sopa de Letras de Gestión & Agilidad</p>
+                </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="flex items-center gap-4 bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-800">
+                <div class="flex items-center gap-2 pr-3 border-r border-slate-800">
+                    <i class="fa-regular fa-clock text-brand-accent"></i>
+                    <span id="timer" class="font-mono font-bold text-lg text-slate-200">00:00</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-bullseye text-brand-500"></i>
+                    <span class="text-xs text-slate-400">Progreso:</span>
+                    <span id="word-counter" class="font-bold text-lg text-brand-accent">0 / 15</span>
+                </div>
+            </div>
+
+            <!-- Student Info Display -->
+            <div class="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-800">
+                <i class="fa-solid fa-user-graduate text-brand-accent"></i>
+                <span id="header-student-name" class="font-bold text-sm text-slate-200">Alumno</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Game Container -->
+    <main class="max-w-7xl mx-auto w-full p-4 md:p-6 flex-1 flex flex-col items-center justify-center">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start">
+            
+            <!-- Left Side / Grid Container -->
+            <div class="lg:col-span-8 flex flex-col items-center w-full">
+                <div class="glass-panel p-3 md:p-5 rounded-2xl w-full flex justify-center items-center shadow-2xl relative overflow-hidden">
+                    <div id="grid-container" class="grid gap-1 md:gap-1.5 touch-none select-none max-w-full">
+                        <!-- Dynamic Grid JavaScript Injection -->
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between w-full px-2 text-xs text-slate-400">
+                    <span><i class="fa-solid fa-hand-pointer mr-1"></i> Haz clic y arrastra o selecciona letra inicial y final</span>
+                    <span id="selection-preview" class="font-mono text-brand-accent font-bold uppercase min-h-[16px]"></span>
+                </div>
+            </div>
+
+            <!-- Right Side / Words List Panel -->
+            <div class="lg:col-span-4 w-full">
+                <div class="glass-panel p-5 rounded-2xl flex flex-col h-full shadow-2xl">
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                        <h2 class="font-bold text-slate-200 flex items-center gap-2 text-base">
+                            <i class="fa-solid fa-list-check text-brand-500"></i> Palabras a Buscar
+                        </h2>
+                        <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full border border-slate-700/50">
+                            15 Aleatorias
+                        </span>
+                    </div>
+
+                    <!-- Scrollable Words List -->
+                    <div id="words-list" class="grid grid-cols-2 lg:grid-cols-1 gap-2 max-h-[500px] overflow-y-auto pr-1">
+                        <!-- Dynamic Words List JavaScript Injection -->
+                    </div>
+
+                    <!-- Category Badges / Footer Note inside Card -->
+                    <div class="mt-6 pt-4 border-t border-slate-800/80 flex flex-wrap gap-1.5 justify-center">
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Scrum</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">Kanban</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">XP</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Liderazgo</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Start Modal (Student Name Entry) -->
+    <div id="start-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-50 transition-opacity duration-300">
+        <div class="glass-panel border-2 border-brand-500/40 p-8 rounded-3xl max-w-md w-full text-center shadow-2xl relative overflow-hidden">
+            <div class="w-16 h-16 bg-gradient-to-tr from-brand-600 to-brand-accent rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-500/30 text-white text-3xl">
+                <i class="fa-solid fa-user-pen"></i>
+            </div>
+            <h2 class="text-2xl font-extrabold text-white mb-2">Registro del Alumno</h2>
+            <p class="text-slate-300 text-xs mb-6">Ingresa tu nombre completo para comenzar el reto. Recuerda que solo dispones de <strong>un único intento</strong>.</p>
+            
+            <form id="start-form" onsubmit="handleStartGame(event)" class="space-y-4">
+                <div class="text-left">
+                    <label for="student-name-input" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Nombre Completo</label>
+                    <input type="text" id="student-name-input" required placeholder="Ej. Ana María García López" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all font-semibold">
+                </div>
+                <button type="submit" class="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-brand-600 to-brand-accent hover:from-brand-500 hover:to-cyan-400 text-white font-bold text-base transition-all shadow-lg shadow-brand-500/25 active:scale-95">
+                    <i class="fa-solid fa-play mr-2"></i> Comenzar Reto
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Already Played Screen Modal -->
+    <div id="already-played-modal" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden transition-opacity duration-300">
+        <div class="glass-panel border-2 border-amber-500/40 p-8 rounded-3xl max-w-md w-full text-center shadow-2xl relative overflow-hidden">
+            <div class="w-20 h-20 bg-gradient-to-tr from-amber-500 to-amber-300 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30 text-slate-950 text-4xl">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h2 class="text-2xl font-extrabold text-white mb-2">Intento Realizado</h2>
+            <p class="text-slate-300 text-sm mb-6">Ya has completado tu evaluación de Sopa de Letras Ágil anteriormente. ¡Gracias por participar!</p>
+            
+            <div class="bg-slate-900/80 rounded-2xl p-4 border border-slate-800 text-center">
+                <span class="text-xs text-slate-400 block mb-1">Alumno Registrado</span>
+                <span id="prev-student-name" class="font-bold text-base text-brand-accent block mb-3">-</span>
+                <span class="text-xs text-slate-400 block mb-1">Tiempo Registrado</span>
+                <span id="prev-student-time" class="font-mono text-lg font-bold text-amber-400">-</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="victory-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
+        <div class="glass-panel border-2 border-brand-500/40 p-8 rounded-3xl max-w-md w-full text-center shadow-2xl transform scale-90 transition-transform duration-300 relative overflow-hidden" id="modal-card">
+            <!-- Glow background -->
+            <div class="absolute -top-24 -left-24 w-48 h-48 bg-brand-500/20 rounded-full blur-3xl"></div>
+            <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-brand-purple/20 rounded-full blur-3xl"></div>
+
+            <div class="w-20 h-20 bg-gradient-to-tr from-amber-400 to-amber-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30 text-amber-950 text-4xl animate-bounce">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+
+            <h2 class="text-2xl font-extrabold text-white mb-1">¡Reto Completado!</h2>
+            <p id="victory-student-name" class="text-lg font-bold text-brand-accent mb-4">Alumno</p>
+
+            <div class="bg-slate-900/80 rounded-2xl p-4 border border-slate-800 mb-6 text-center">
+                <span class="text-xs text-slate-400 block mb-1">Tiempo Total</span>
+                <span id="final-time" class="font-mono text-2xl font-bold text-amber-400">00:00</span>
+            </div>
+
+            <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold">
+                <i class="fa-solid fa-circle-check mr-1"></i> Tu resultado ha sido registrado con éxito.
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full py-3 px-4 text-center text-xs text-slate-500 border-t border-slate-800/60 glass-panel">
+        <p>Diseñado para evaluación interactiva en Metodologías Ágiles & Gestor de Proyectos.</p>
+    </footer>
+
+    <!-- Game Engine Logic -->
+    <script>
+        // Pool of 30 Agile & Project Management terms
+        const WORD_POOL = [
+            { original: "SCRUM", clean: "SCRUM" },
+            { original: "KANBAN", clean: "KANBAN" },
+            { original: "SPRINT", clean: "SPRINT" },
+            { original: "BACKLOG", clean: "BACKLOG" },
+            { original: "ADAPTABILIDAD", clean: "ADAPTABILIDAD" },
+            { original: "INNOVACION", clean: "INNOVACION" },
+            { original: "TRABAJO EN EQUIPO", clean: "TRABAJOENEQUIPO" },
+            { original: "PRODUCT OWNER", clean: "PRODUCTOWNER" },
+            { original: "HISTORIA DE USUARIO", clean: "HISTORIADEUSUARIO" },
+            { original: "RETROSPECTIVA", clean: "RETROSPECTIVA" },
+            { original: "ITERACION", clean: "ITERACION" },
+            { original: "MANIFIESTO AGILE", clean: "MANIFIESTOAGILE" },
+            { original: "SCRUM MASTER", clean: "SCRUMMASTER" },
+            { original: "DAILY STANDUP", clean: "DAILYSTANDUP" },
+            { original: "VELOCIDAD", clean: "VELOCIDAD" },
+            { original: "BURNDOWN CHART", clean: "BURNDOWNCHART" },
+            { original: "FEEDBACK", clean: "FEEDBACK" },
+            { original: "REFACTORIZACION", clean: "REFACTORIZACION" },
+            { original: "MVP", clean: "MVP" },
+            { original: "LEAN", clean: "LEAN" },
+            { original: "EXTREME PROGRAMMING", clean: "EXTREMEPROGRAMMING" },
+            { original: "PAIR PROGRAMMING", clean: "PAIRPROGRAMMING" },
+            { original: "INTEGRACION CONTINUA", clean: "INTEGRACIONCONTINUA" },
+            { original: "DEBT TECNICA", clean: "DEBTTECNICA" },
+            { original: "PLANNING", clean: "PLANNING" },
+            { original: "CRITERIOS ACEPTACION", clean: "CRITERIOSACEPTACION" },
+            { original: "AUTOGESTION", clean: "AUTOGESTION" },
+            { original: "MEJORA CONTINUA", clean: "MEJORACONTINUA" },
+            { original: "ENTREGA DE VALOR", clean: "ENTREGADEVALOR" },
+            { original: "SPOF", clean: "SPOF" }
+        ];
+
+        // Unique palette for highlight found words
+        const COLOR_PALETTE = [
+            { bg: 'bg-emerald-500/30', border: 'border-emerald-400', text: 'text-emerald-300', hex: '#10b981' },
+            { bg: 'bg-cyan-500/30', border: 'border-cyan-400', text: 'text-cyan-300', hex: '#06b6d4' },
+            { bg: 'bg-purple-500/30', border: 'border-purple-400', text: 'text-purple-300', hex: '#8b5cf6' },
+            { bg: 'bg-amber-500/30', border: 'border-amber-400', text: 'text-amber-300', hex: '#f59e0b' },
+            { bg: 'bg-pink-500/30', border: 'border-pink-400', text: 'text-pink-300', hex: '#ec4899' },
+            { bg: 'bg-indigo-500/30', border: 'border-indigo-400', text: 'text-indigo-300', hex: '#6366f1' },
+            { bg: 'bg-blue-500/30', border: 'border-blue-400', text: 'text-blue-300', hex: '#3b82f6' },
+            { bg: 'bg-teal-500/30', border: 'border-teal-400', text: 'text-teal-300', hex: '#14b8a6' },
+        ];
+
+        const GRID_SIZE = 16;
+        const TARGET_WORDS_COUNT = 15;
+
+        let grid = [];
+        let placedWords = []; // { original, clean, path: [{r, c}], found: bool, colorIdx: int }
+        let selectedCells = []; // [{r, c}]
+        let isMouseDown = false;
+        let startCell = null;
+
+        // Game State Variables
+        let timerInterval = null;
+        let secondsElapsed = 0;
+        let wordsFoundCount = 0;
+        let studentName = "";
+
+        // Check single attempt status on load
+        window.onload = function() {
+            setupEventListeners();
+            checkPreviousAttempt();
+        };
+
+        function checkPreviousAttempt() {
+            const completed = localStorage.getItem('agile_wordsearch_completed');
+            if (completed === 'true') {
+                const prevName = localStorage.getItem('agile_wordsearch_name') || 'Alumno';
+                const prevTime = localStorage.getItem('agile_wordsearch_time') || '--:--';
+                document.getElementById('prev-student-name').textContent = prevName;
+                document.getElementById('prev-student-time').textContent = prevTime;
+                document.getElementById('start-modal').classList.add('hidden');
+                document.getElementById('already-played-modal').classList.remove('hidden');
+            }
+        }
+
+        function handleStartGame(e) {
+            e.preventDefault();
+            const input = document.getElementById('student-name-input');
+            const name = input.value.trim();
+            if (!name) return;
+
+            studentName = name;
+            document.getElementById('header-student-name').textContent = studentName;
+            document.getElementById('start-modal').classList.add('hidden');
+
+            initGame();
+        }
+
+        function initGame() {
+            // Reset state
+            clearInterval(timerInterval);
+            secondsElapsed = 0;
+            wordsFoundCount = 0;
+            selectedCells = [];
+            isMouseDown = false;
+            startCell = null;
+
+            document.getElementById('timer').textContent = "00:00";
+            document.getElementById('word-counter').textContent = `0 / ${TARGET_WORDS_COUNT}`;
+            document.getElementById('selection-preview').textContent = '';
+
+            // Start Timer
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                const mins = Math.floor(secondsElapsed / 60).toString().padStart(2, '0');
+                const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+                document.getElementById('timer').textContent = `${mins}:${secs}`;
+            }, 1000);
+
+            // Select 15 random words from pool of 30
+            const shuffledPool = [...WORD_POOL].sort(() => 0.5 - Math.random());
+            const selectedWords = shuffledPool.slice(0, TARGET_WORDS_COUNT);
+
+            // Build Grid with placement algorithm
+            let success = false;
+            let attempts = 0;
+
+            while (!success && attempts < 100) {
+                attempts++;
+                success = generateGrid(selectedWords);
+            }
+
+            if (!success) {
+                console.warn("Retrying grid generation...");
+                initGame();
+                return;
+            }
+
+            renderGrid();
+            renderWordsList();
+        }
+
+        // Generate Grid and place words randomly
+        function generateGrid(words) {
+            // Initialize empty grid
+            grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(''));
+            placedWords = [];
+
+            // Directions: [dRow, dCol] (8 directions: Horizontal, Vertical, Diagonal)
+            const directions = [
+                [0, 1],   // Right
+                [1, 0],   // Down
+                [1, 1],   // Down-Right
+                [-1, 1],  // Up-Right
+                [0, -1],  // Left
+                [-1, 0],  // Up
+                [-1, -1], // Up-Left
+                [1, -1]   // Down-Left
+            ];
+
+            // Sort words by length descending for better placement efficiency
+            const sortedWords = [...words].sort((a, b) => b.clean.length - a.clean.length);
+
+            for (let wordObj of sortedWords) {
+                const word = wordObj.clean;
+                let placed = false;
+                let wordAttempts = 0;
+
+                // Shuffle directions for randomness
+                const shuffledDirs = [...directions].sort(() => 0.5 - Math.random());
+
+                while (!placed && wordAttempts < 150) {
+                    wordAttempts++;
+                    const dir = shuffledDirs[Math.floor(Math.random() * shuffledDirs.length)];
+                    const startR = Math.floor(Math.random() * GRID_SIZE);
+                    const startC = Math.floor(Math.random() * GRID_SIZE);
+
+                    // Check if word fits in this placement
+                    const endR = startR + dir[0] * (word.length - 1);
+                    const endC = startC + dir[1] * (word.length - 1);
+
+                    if (endR >= 0 && endR < GRID_SIZE && endC >= 0 && endC < GRID_SIZE) {
+                        let canPlace = true;
+                        const path = [];
+
+                        for (let i = 0; i < word.length; i++) {
+                            const r = startR + dir[0] * i;
+                            const c = startC + dir[1] * i;
+                            const currentCell = grid[r][c];
+
+                            if (currentCell !== '' && currentCell !== word[i]) {
+                                canPlace = false;
+                                break;
+                            }
+                            path.push({ r, c });
+                        }
+
+                        if (canPlace) {
+                            // Place letters in grid
+                            for (let i = 0; i < word.length; i++) {
+                                grid[path[i].r][path[i].c] = word[i];
+                            }
+                            placedWords.push({
+                                original: wordObj.original,
+                                clean: word,
+                                path: path,
+                                found: false,
+                                colorIdx: placedWords.length % COLOR_PALETTE.length
+                            });
+                            placed = true;
+                        }
+                    }
+                }
+
+                if (!placed) return false; // Grid generation failed for this word, retry whole grid
+            }
+
+            // Fill empty cells with random uppercase letters
+            const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c] === '') {
+                        grid[r][c] = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        // Render Grid UI
+        function renderGrid() {
+            const container = document.getElementById('grid-container');
+            container.style.gridTemplateColumns = `repeat(${GRID_SIZE}, minmax(0, 1fr))`;
+            container.innerHTML = '';
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cellEl = document.createElement('div');
+                    cellEl.dataset.row = r;
+                    cellEl.dataset.col = c;
+                    cellEl.className = `grid-cell w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 flex items-center justify-center font-mono text-sm md:text-base font-bold rounded-lg bg-slate-800/80 text-slate-300 border border-slate-700/50 cursor-pointer shadow-sm hover:bg-slate-700/80`;
+                    cellEl.textContent = grid[r][c];
+
+                    // Mouse & Touch event bindings
+                    cellEl.addEventListener('mousedown', (e) => handleCellStart(r, c, e));
+                    cellEl.addEventListener('mouseenter', () => handleCellEnter(r, c));
+                    cellEl.addEventListener('touchstart', (e) => handleTouchStart(r, c, e), { passive: false });
+                    
+                    container.appendChild(cellEl);
+                }
+            }
+        }
+
+        // Render Sidebar Word List
+        function renderWordsList() {
+            const listEl = document.getElementById('words-list');
+            listEl.innerHTML = '';
+
+            // Sort list alphabetically for clean display
+            const sortedDisplayList = [...placedWords].sort((a, b) => a.original.localeCompare(b.original));
+
+            sortedDisplayList.forEach((item) => {
+                const wordCard = document.createElement('div');
+                wordCard.id = `word-item-${item.clean}`;
+                wordCard.className = `glass-card p-2.5 rounded-xl border border-slate-800 flex items-center justify-between transition-all duration-300`;
+                
+                wordCard.innerHTML = `
+                    <span class="text-xs sm:text-sm font-semibold tracking-wide text-slate-300 word-text transition-all duration-300">${item.original}</span>
+                    <i class="fa-solid fa-circle-check text-slate-600 status-icon transition-all duration-300 text-xs"></i>
+                `;
+                listEl.appendChild(wordCard);
+            });
+        }
+
+        // Input & Selection Handling Logic
+        function handleCellStart(r, c, e) {
+            e.preventDefault();
+            isMouseDown = true;
+            startCell = { r, c };
+            updateSelection(r, c);
+        }
+
+        function handleCellEnter(r, c) {
+            if (!isMouseDown || !startCell) return;
+            updateSelection(r, c);
+        }
+
+        function handleTouchStart(r, c, e) {
+            e.preventDefault();
+            isMouseDown = true;
+            startCell = { r, c };
+            updateSelection(r, c);
+        }
+
+        // Global touchmove listener to support fluid swipe selection on mobile touch screens
+        document.addEventListener('touchmove', (e) => {
+            if (!isMouseDown || !startCell) return;
+            const touch = e.touches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (element && element.classList.contains('grid-cell')) {
+                const r = parseInt(element.dataset.row);
+                const c = parseInt(element.dataset.col);
+                if (!isNaN(r) && !isNaN(c)) {
+                    updateSelection(r, c);
+                }
+            }
+        }, { passive: false });
+
+        document.addEventListener('mouseup', handleSelectionEnd);
+        document.addEventListener('touchend', handleSelectionEnd);
+
+        // Calculate valid line trajectory (8 directions) from startCell to current cell
+        function updateSelection(currR, currC) {
+            if (!startCell) return;
+
+            const dr = currR - startCell.r;
+            const dc = currC - startCell.c;
+
+            // Determine if trajectory is straight horizontal, vertical or diagonal
+            const isHorizontal = dr === 0;
+            const isVertical = dc === 0;
+            const isDiagonal = Math.abs(dr) === Math.abs(dc);
+
+            clearSelectionHighlights();
+
+            if (isHorizontal || isVertical || isDiagonal) {
+                const steps = Math.max(Math.abs(dr), Math.abs(dc));
+                const stepR = dr === 0 ? 0 : dr / steps;
+                const stepC = dc === 0 ? 0 : dc / steps;
+
+                selectedCells = [];
+                let currentText = '';
+
+                for (let i = 0; i <= steps; i++) {
+                    const r = startCell.r + stepR * i;
+                    const c = startCell.c + stepC * i;
+                    selectedCells.push({ r, c });
+                    currentText += grid[r][c];
+                }
+
+                // Apply temporary selected styling
+                selectedCells.forEach(cell => {
+                    const el = getCellEl(cell.r, cell.c);
+                    if (el && !el.classList.contains('found')) {
+                        el.classList.add('selected');
+                    }
+                });
+
+                document.getElementById('selection-preview').textContent = currentText;
+            }
+        }
+
+        function clearSelectionHighlights() {
+            document.querySelectorAll('.grid-cell.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+        }
+
+        function handleSelectionEnd() {
+            if (!isMouseDown) return;
+            isMouseDown = false;
+
+            if (selectedCells.length > 0) {
+                checkWordMatch();
+            }
+
+            clearSelectionHighlights();
+            selectedCells = [];
+            startCell = null;
+            document.getElementById('selection-preview').textContent = '';
+        }
+
+        function getCellEl(r, c) {
+            return document.querySelector(`.grid-cell[data-row="${r}"][data-col="${c}"]`);
+        }
+
+        // Validate selected word against active targets
+        function checkWordMatch() {
+            const selectedStr = selectedCells.map(c => grid[c.r][c.c]).join('');
+            const reversedStr = selectedStr.split('').reverse().join('');
+
+            for (let wordObj of placedWords) {
+                if (!wordObj.found && (wordObj.clean === selectedStr || wordObj.clean === reversedStr)) {
+                    // Match found!
+                    markWordFound(wordObj);
+                    break;
+                }
+            }
+        }
+
+        function markWordFound(wordObj) {
+            wordObj.found = true;
+            wordsFoundCount++;
+            const palette = COLOR_PALETTE[wordObj.colorIdx];
+
+            // Highlight cells in grid with persistent theme colors
+            wordObj.path.forEach(cell => {
+                const el = getCellEl(cell.r, cell.c);
+                if (el) {
+                    el.classList.remove('selected', 'hint');
+                    el.classList.add('found', palette.bg, palette.border, palette.text, 'border-2');
+                }
+            });
+
+            // Update word item in right sidebar list
+            const wordCard = document.getElementById(`word-item-${wordObj.clean}`);
+            if (wordCard) {
+                wordCard.className = `glass-card p-2.5 rounded-xl border ${palette.border} ${palette.bg} flex items-center justify-between transition-all duration-300 shadow-md`;
+                const textSpan = wordCard.querySelector('.word-text');
+                const icon = wordCard.querySelector('.status-icon');
+                
+                textSpan.className = `text-xs sm:text-sm font-bold tracking-wide ${palette.text} line-through opacity-80`;
+                icon.className = `fa-solid fa-circle-check ${palette.text} text-sm`;
+            }
+
+            // Update Progress Counter
+            document.getElementById('word-counter').textContent = `${wordsFoundCount} / ${TARGET_WORDS_COUNT}`;
+
+            // Check Victory Condition
+            if (wordsFoundCount === TARGET_WORDS_COUNT) {
+                setTimeout(triggerVictory, 400);
+            }
+        }
+
+        // Trigger victory modal & confetti explosion
+        function triggerVictory() {
+            clearInterval(timerInterval);
+
+            const mins = Math.floor(secondsElapsed / 60).toString().padStart(2, '0');
+            const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+            const timeString = `${mins}:${secs}`;
+
+            // Save single attempt to localStorage
+            localStorage.setItem('agile_wordsearch_completed', 'true');
+            localStorage.setItem('agile_wordsearch_name', studentName);
+            localStorage.setItem('agile_wordsearch_time', timeString);
+
+            document.getElementById('victory-student-name').textContent = studentName;
+            document.getElementById('final-time').textContent = timeString;
+
+            const modal = document.getElementById('victory-modal');
+            const card = document.getElementById('modal-card');
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                card.classList.remove('scale-90');
+                card.classList.add('scale-100');
+            }, 10);
+
+            startConfetti();
+        }
+
+        // Lightweight Native Confetti Implementation
+        let confettiAnimationId = null;
+        const confettiCanvas = document.getElementById('confetti-canvas');
+        const ctx = confettiCanvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            confettiCanvas.width = window.innerWidth;
+            confettiCanvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function startConfetti() {
+            resizeCanvas();
+            particles = [];
+            const colors = ['#3b82f6', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899'];
+            
+            for (let i = 0; i < 120; i++) {
+                particles.push({
+                    x: Math.random() * confettiCanvas.width,
+                    y: Math.random() * confettiCanvas.height - confettiCanvas.height,
+                    size: Math.random() * 8 + 4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    vy: Math.random() * 3 + 2,
+                    vx: Math.random() * 2 - 1,
+                    rotation: Math.random() * 360,
+                    rotationSpeed: Math.random() * 10 - 5
+                });
+            }
+            animateConfetti();
+        }
+
+        function animateConfetti() {
+            ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+            particles.forEach((p) => {
+                p.y += p.vy;
+                p.x += p.vx;
+                p.rotation += p.rotationSpeed;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                ctx.restore();
+
+                if (p.y > confettiCanvas.height) {
+                    p.y = -10;
+                    p.x = Math.random() * confettiCanvas.width;
+                }
+            });
+            confettiAnimationId = requestAnimationFrame(animateConfetti);
+        }
+
+        function setupEventListeners() {
+            // Prevent dragging text on grid
+            document.getElementById('grid-container').addEventListener('dragstart', (e) => e.preventDefault());
+        }
+    </script>
+</body>
+</html>
